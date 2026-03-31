@@ -22,6 +22,7 @@ worktree:
   dirs:
     glm: "D:\\2026033101"
     kimi: "D:\\kimi-workspace"
+    opus: "D:\\opus-workspace"
     # 其他 agent 的 worktree 目录在加入时自动注册
 
 # 协作规则
