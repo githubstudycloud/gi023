@@ -134,3 +134,39 @@ signals:
     task_done: "task-{task-id}-done.json"
     review_ready: "review-{task-id}-for-{target-agent}.json"
     merge_request: "merge-{task-id}.json"
+
+# =============================================================
+# 支持的 AI CLI
+# =============================================================
+cli_support:
+  - name: "GitHub Copilot"
+    config: ".github/copilot-instructions.md"
+    auto_load: true
+  - name: "Claude Code"
+    config: ".claude/instructions.md"
+    auto_load: true
+  - name: "Cursor"
+    config: ".cursorrules"
+    auto_load: true
+  - name: "Windsurf"
+    config: ".windsurfrules"
+    auto_load: true
+  - name: "Trae"
+    config: ".trae/rules"
+    auto_load: true
+  - name: "Augment Code"
+    config: ".augment/instructions.md"
+    auto_load: true
+  - name: "Aider"
+    config: ".aider.conf.yml"
+    auto_load: true
+
+# =============================================================
+# 自动化脚本
+# =============================================================
+scripts:
+  check_status: "scripts/check-status.ps1"
+  dispatch_task: "scripts/dispatch-task.ps1"
+  collect_reviews: "scripts/collect-reviews.ps1"
+  sync_all: "scripts/sync-all.ps1"
+  open_workspaces: "scripts/open-workspaces.ps1"

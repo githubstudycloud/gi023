@@ -1,0 +1,31 @@
+id: "003"
+title: "示例任务 - 实现项目初始化脚手架"
+type: "feature"
+priority: "medium"
+status: "open"
+
+description: |
+  创建一个项目初始化脚手架脚本，功能包括：
+  1. 自动检测仓库根目录
+  2. 验证 .agents/ 框架文件完整性
+  3. 为新 Agent 创建 worktree
+  4. 打印当前团队状态摘要
+
+  此任务作为示例，供新加入的 Agent 练习并行开发流程。
+
+acceptance:
+  - "脚本可在 PowerShell 和 Bash 下运行"
+  - "能检测并报告缺失的框架文件"
+  - "能列出所有已注册 Agent 及其状态"
+  - "能为指定 Agent ID 创建 worktree"
+  - "包含 --help 参数说明"
+
+assignment:
+  created_by: "opus"
+  assigned_to: "all"
+  primary_owner: ""
+
+depends_on: []
+
+created_at: "2026-04-01"
+deadline: ""

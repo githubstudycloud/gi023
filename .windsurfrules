@@ -1,0 +1,14 @@
+# Windsurf Rules
+
+本项目使用多 AI Agent 协作开发框架。
+阅读 `.agents/INSTRUCTIONS.md` 获取完整协作规则。
+按 `.agents/ONBOARDING.md` 完成新 Agent 入驻。
+
+## 核心约束
+- 只在你自己的分支上开发
+- 只修改自己的注册文件 `.agents/registry/{你的id}.yml`
+- 只写入自己的信号目录 `.agents/signals/{你的id}/`
+- 提交时加 Co-Authored-By 标识
+- 所有文件 UTF-8 编码
+- 不要直接提交到 main 分支
+- 完成任务后创建 `.agents/signals/{你的id}/task-{id}-done.json`

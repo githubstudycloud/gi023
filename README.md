@@ -24,6 +24,7 @@
 ├── FRAMEWORK.yml               ← 框架定义（规则、角色、状态机）
 ├── INSTRUCTIONS.md             ← AI Agent 必读指令
 ├── ONBOARDING.md               ← 新 Agent 入驻指南
+├── CHANGELOG.md                ← 框架版本变更记录
 ├── registry/                   ← Agent 注册（每人一文件，零冲突）
 │   ├── glm.yml
 │   ├── kimi.yml
@@ -34,15 +35,31 @@
 ├── reviews/                    ← 交叉审阅记录
 │   └── .template.yml
 ├── signals/                    ← Agent 间信号通信
-│   └── {agent-id}/
+│   ├── glm/
+│   ├── kimi/
+│   ├── minimax/
+│   └── opus/
 │       ├── heartbeat.json
 │       └── task-{id}-done.json
 └── locks/                      ← 文件锁（同目录多实例）
 
+scripts/                        ← 人类操作者自动化脚本
+├── check-status.ps1            ← 全局 Agent 状态仪表盘
+├── dispatch-task.ps1           ← 创建并分发任务
+├── collect-reviews.ps1         ← 汇总审阅评分
+├── sync-all.ps1                ← 合并后通知全员同步
+└── open-workspaces.ps1         ← 一键打开所有 worktree 窗口
+
 .github/copilot-instructions.md ← GitHub Copilot 自动读取
 .claude/instructions.md         ← Claude Code 自动读取
 .cursorrules                    ← Cursor 自动读取
+.windsurfrules                  ← Windsurf 自动读取
+.trae/rules                     ← Trae 自动读取
+.augment/instructions.md        ← Augment Code 自动读取
 .aider.conf.yml                 ← Aider 自动读取
+
+OPERATIONS.md                   ← 并行开发操作手册（人类必读）
+QUICKSTART.md                   ← 5 分钟快速上手
 ```
 
 ## 工作流
@@ -78,6 +95,25 @@ git push origin {你的id}/dev
 
 详见 [.agents/ONBOARDING.md](.agents/ONBOARDING.md)
 
+## 自动化脚本
+
+```powershell
+# 查看所有 Agent 状态
+.\scripts\check-status.ps1
+
+# 创建并分发任务
+.\scripts\dispatch-task.ps1 -Id "004" -Title "实现XXX" -Type "feature"
+
+# 汇总审阅评分
+.\scripts\collect-reviews.ps1 -TaskId "003"
+
+# 合并后通知全员同步
+.\scripts\sync-all.ps1
+
+# 一键打开所有 Agent 的编辑器窗口
+.\scripts\open-workspaces.ps1
+```
+
 ## 分支规范
 
 | 分支 | 用途 | 权限 |
@@ -86,6 +122,18 @@ git push origin {你的id}/dev
 | `{id}/dev` | Agent 持久开发分支 | 对应 Agent |
 | `{id}/task/{NNN}` | 具体任务分支 | 对应 Agent |
 
+## 支持的 AI CLI
+
+| CLI | 配置文件 | 自动加载 |
+|-----|---------|---------|
+| GitHub Copilot | `.github/copilot-instructions.md` | ✅ |
+| Claude Code | `.claude/instructions.md` | ✅ |
+| Cursor | `.cursorrules` | ✅ |
+| Windsurf | `.windsurfrules` | ✅ |
+| Trae | `.trae/rules` | ✅ |
+| Augment Code | `.augment/instructions.md` | ✅ |
+| Aider | `.aider.conf.yml` | ✅ |
+
 ## 同目录多 Agent
 
 当多个 AI CLI 实例在同一目录工作时，使用 `.agents/locks/` 文件锁协调。
@@ -93,4 +141,4 @@ git push origin {你的id}/dev
 
 ---
 
-*Framework v2.0 by Opus (claude-opus-4.6) | 2026-03-31*
+*Framework v2.1 by Opus (claude-opus-4.6) | 2026-04-01*

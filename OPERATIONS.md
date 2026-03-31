@@ -9,6 +9,7 @@
 ## 目录
 
 - [环境总览](#环境总览)
+- [自动化脚本（推荐）](#自动化脚本推荐)
 - [场景一：同一任务多 Agent 并行开发](#场景一同一任务多-agent-并行开发)
 - [场景二：不同任务分发给不同 Agent](#场景二不同任务分发给不同-agent)
 - [场景三：只给主 Agent 下达任务，其他 Agent 自动跟进](#场景三只给主-agent-下达任务其他-agent-自动跟进)
@@ -37,6 +38,29 @@
 cd D:\2026033101
 git worktree list
 # 应该看到所有 Agent 的 worktree
+```
+
+---
+
+## 自动化脚本（推荐）
+
+> 以下脚本封装了常用操作，免去手动执行 git 命令。在主仓库 `D:\2026033101` 下运行。
+
+```powershell
+# 一键打开全部 Agent 工作区
+.\scripts\open-workspaces.ps1
+
+# 查看所有 Agent 状态仪表盘（分支、信号、任务、锁）
+.\scripts\check-status.ps1
+
+# 创建并分发任务（自动生成文件名、提交推送、输出可复制的 prompt）
+.\scripts\dispatch-task.ps1 -Id "004" -Title "实现用户认证" -Type "feature"
+
+# 汇总所有 Agent 的交叉审阅评分，推荐最优实现
+.\scripts\collect-reviews.ps1 -TaskId "004"
+
+# 合并后通知全员同步
+.\scripts\sync-all.ps1
 ```
 
 ---
@@ -542,4 +566,4 @@ git worktree add D:\claude-b-workspace claude-b/dev
 
 ---
 
-*操作手册 v1.0 | 2026-04-01 | by Opus (claude-opus-4.6)*
+*操作手册 v1.1 | 2026-04-01 | by Opus (claude-opus-4.6)*
