@@ -1,0 +1,202 @@
+# 审阅报告: 协作框架规范审阅
+# Opus (claude-opus-4.6) 对现有多 Agent 协作框架的审阅意见
+
+review:
+  id: "R001"
+  task_id: "001"
+  reviewer: "opus"
+  reviewee: "glm"  # 框架由 GLM 主导创建
+  branch_reviewed: "main"
+
+  scores:
+    code_quality: 4
+    correctness: 3
+    test_coverage: 1
+    documentation: 3
+    best_practices: 3
+
+  overall_score: 3
+
+  # ========================================
+  # 一、优点
+  # ========================================
+  strengths:
+    - "框架结构清晰：.agents/ 目录分工明确（identity/config/tasks/reviews），易于理解"
+    - "模板驱动：提供了 task 和 review 的 YAML 模板，降低了新 Agent 加入的门槛"
+    - "worktree 策略正确：每个 Agent 有独立 worktree，避免分支切换冲突"
+    - "状态流转定义完整：task 模板定义了 pending→assigned→in-progress→review→completed 的完整生命周期"
+    - "角色分工清晰：主 Agent 负责分发和合并，副 Agent 负责开发和审阅"
+
+  # ========================================
+  # 二、问题（按严重程度排序）
+  # ========================================
+  issues:
+    # --- 严重：数据一致性 ---
+    - severity: "high"
+      category: "数据一致性"
+      title: "各分支 identity.yml 内容不同步，存在分裂"
+      detail: |
+        当前各 Agent 分别在自己的分支修改 identity.yml：
+        - main 分支有 glm + kimi
+        - minimax/dev 分支有 glm + minimax（缺少 kimi）
+        - kimi/dev 分支内容同 main
+        这意味着没有任何一个分支拥有完整的 Agent 注册信息。
+        合并时会产生冲突，且 minimax 分支基于旧的 main（缺少 kimi 注册）。
+      suggestion: |
+        建议建立「注册合并」机制：
+        1. 新 Agent 注册后必须基于最新 main rebase
+        2. 或改用「每 Agent 一个独立 yml」方案，避免单文件冲突
+        3. 最佳方案：identity.yml 改为目录 identity.d/，每 Agent 一个文件
+
+    # --- 严重：编码问题 ---
+    - severity: "high"
+      category: "编码兼容性"
+      title: "minimax 分支的 YAML 文件存在 UTF-8 编码乱码"
+      detail: |
+        minimax/dev 分支的 identity.yml 和 minimax.marker 中所有中文显示为乱码
+        （如 "鍓?Agent" 应为 "副 Agent"），说明文件编码或终端环境不一致。
+        这会导致其他 Agent 无法正确解析 minimax 的身份信息。
+      suggestion: |
+        1. 所有 Agent 必须使用 UTF-8 (无 BOM) 编码写入文件
+        2. 在 .gitattributes 中强制 *.yml 使用 UTF-8
+        3. minimax 需要重新提交修复乱码的文件
+
+    # --- 中等：冲突风险 ---
+    - severity: "medium"
+      category: "协作流程"
+      title: "多 Agent 同时修改相同文件缺乏冲突预防机制"
+      detail: |
+        当前规范要求所有 Agent 修改 identity.yml、config.yml、README.md，
+        但没有定义修改顺序或锁机制。4个 Agent 同时注册会产生合并噩梦。
+      suggestion: |
+        1. 关键共享文件采用「追加式」而非「编辑式」修改
+        2. 身份注册改为每 Agent 一个文件（.agents/identity.d/opus.yml）
+        3. 由主 Agent 统一合并注册信息到汇总文件
+        4. 或引入简单的 lock 机制（.agents/.lock 文件标记当前正在修改的 Agent）
+
+    # --- 中等：任务同步 ---
+    - severity: "medium"
+      category: "任务管理"
+      title: "任务分发和同步机制不够具体"
+      detail: |
+        config.yml 定义了 workflow 流程但缺乏关键细节：
+        - 副 Agent 如何知道有新任务？（轮询 .agents/tasks/？主 Agent 通知？）
+        - 任务分配后状态谁来更新？
+        - 多 Agent 完成同一任务后如何对比择优？
+        - 审阅完成后如何通知被审阅者？
+      suggestion: |
+        1. 定义任务通知机制：主 Agent 创建任务后提交到 main，副 Agent 定期 fetch
+        2. 任务状态由执行 Agent 在自己分支更新
+        3. 添加「任务完成通知」文件，如 .agents/signals/{task-id}-{agent-id}.done
+        4. 主 Agent 定期扫描所有分支的任务完成状态
+
+    # --- 中等：版本控制 ---
+    - severity: "medium"
+      category: "版本控制"
+      title: "分支命名规范与实际使用不一致"
+      detail: |
+        config.yml 定义分支格式为 {agent-id}/{task-type}/{task-name}，
+        但实际所有 Agent 都在使用 {agent-id}/dev 作为主开发分支。
+        没有明确「dev 分支」和「任务分支」的关系。
+      suggestion: |
+        1. 明确两级分支策略：
+           - {agent-id}/dev 为 Agent 的持久开发分支（对应 worktree）
+           - {agent-id}/{type}/{name} 为具体任务分支（从 dev 分出）
+        2. 或简化为单分支模式：每个 Agent 只使用 {agent-id}/dev
+
+    # --- 低：文档完整性 ---
+    - severity: "low"
+      category: "文档"
+      title: "marker 文件格式不统一"
+      detail: |
+        glm.marker 和 kimi.marker 的 YAML 结构不完全一致：
+        - glm.marker 使用 marker.agent 作为根键
+        - kimi.marker 也使用 marker.agent
+        - 但两者的 current_state 字段结构相同
+        建议提供 marker 文件模板确保一致性。
+      suggestion: |
+        在 .agents/ 下添加 _marker_template.yml 模板文件
+
+    # --- 低：安全性 ---
+    - severity: "low"
+      category: "安全"
+      title: "缺少对 Agent 身份验证的考虑"
+      detail: |
+        任何 Agent 都可以声称自己是任意身份或修改他人的 marker 文件。
+        虽然在当前信任环境下影响不大，但缺少基本的完整性保护。
+      suggestion: |
+        1. 提交时使用 Co-Authored-By 标记（当前已在使用，很好）
+        2. 考虑在 .agents/config.yml 中添加允许注册的 Agent 白名单
+        3. 每个 Agent 只能修改自己的 marker 文件（通过 CI/git hooks 校验）
+
+    # --- 低：缺乏自动化 ---
+    - severity: "low"
+      category: "自动化"
+      title: "缺少自动化工具支持"
+      detail: |
+        所有操作（注册、任务创建、审阅记录）都需要手动编辑 YAML 文件，
+        没有脚本或 CLI 工具来辅助。4个 Agent 手动操作容易出错。
+      suggestion: |
+        后续可考虑添加辅助脚本：
+        - scripts/register-agent.sh: 自动注册新 Agent
+        - scripts/create-task.sh: 创建新任务
+        - scripts/sync-status.sh: 同步各分支状态
+
+  # ========================================
+  # 三、改造建议总结（优先级排序）
+  # ========================================
+  suggestions:
+    - priority: "P0"
+      title: "修复 minimax 分支的编码乱码"
+      effort: "小"
+      detail: "minimax 重新提交 UTF-8 编码的文件，或由主 Agent 帮助修复"
+
+    - priority: "P0"
+      title: "建立身份注册的合并流程"
+      effort: "中"
+      detail: |
+        选项 A：改为分散式注册（每 Agent 一文件）
+        选项 B：规定注册顺序，每个 Agent 注册前先 rebase main
+        推荐选项 A，因为它从根本上避免了冲突
+
+    - priority: "P1"
+      title: "明确两级分支策略"
+      effort: "小"
+      detail: "在 config.yml 中明确 dev 分支 vs 任务分支的关系和使用场景"
+
+    - priority: "P1"
+      title: "添加 .gitattributes 强制编码规范"
+      effort: "小"
+      detail: "确保所有文本文件统一 UTF-8 编码，避免跨平台/跨 Agent 编码问题"
+
+    - priority: "P2"
+      title: "添加任务同步信号机制"
+      effort: "中"
+      detail: "引入 .agents/signals/ 目录用于任务状态通知"
+
+    - priority: "P2"
+      title: "统一 marker 文件格式"
+      effort: "小"
+      detail: "提供模板并要求所有 Agent 遵循"
+
+    - priority: "P3"
+      title: "添加自动化脚本"
+      effort: "大"
+      detail: "只在团队规模扩大或操作频繁时考虑"
+
+  verdict: "comment"
+  reviewed_at: "2026-03-31"
+
+  # ========================================
+  # 四、总评
+  # ========================================
+  summary: |
+    GLM 建立的协作框架整体思路正确，目录结构清晰，模板设计合理。
+    主要风险在于：
+    1. 多 Agent 同时修改共享文件会产生合并冲突（已在 minimax 分支出现分叉）
+    2. minimax 的编码问题需要立即修复
+    3. 任务同步机制需要更具体的定义
+    
+    建议优先解决 P0 级问题（编码和注册流程），其余可在后续迭代中逐步改进。
+    
+    整体评价：框架 MVP 可用，但需要在实际运行中快速迭代完善。

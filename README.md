@@ -10,6 +10,7 @@
 |-------|------|------|------|
 | GLM | glm-5.1 | 主 Agent (Primary) | 活跃 |
 | Kimi | kimi-k2 | 副 Agent (Secondary) | 活跃 |
+| Opus | claude-opus-4.6 | 副 Agent (Secondary #3) | 活跃 |
 
 > 其他 Agent 加入时将更新此表
 

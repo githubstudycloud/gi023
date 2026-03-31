@@ -41,19 +41,26 @@ agents:
       - "方案优化"
     marker_file: ".agents/kimi.marker"
 
+  opus:
+    id: "opus"
+    name: "Claude Opus (Anthropic)"
+    model: "claude-opus-4.6"
+    role: "secondary"
+    description: "副 Agent #3，负责代码开发、深度审阅、架构分析、规范改进建议"
+    worktree: "D:\\2026033101"
+    worktree_dev: "D:\\opus-workspace"
+    dev_branch: "opus/dev"
+    branch_prefix: "opus"
+    status: "active"
+    joined_at: "2026-03-31"
+    capabilities:
+      - "代码开发"
+      - "深度代码审阅"
+      - "架构分析"
+      - "规范改进"
+      - "跨分支对比审阅"
+      - "安全审计"
+    marker_file: ".agents/opus.marker"
+    primary_agent: "glm"
+
   # 其他 Agent 加入时在此注册
-  # Example template for new agents:
-  # claude:
-  #   id: "claude"
-  #   name: "Claude (Anthropic)"
-  #   model: "claude-opus-4-6"
-  #   role: "secondary"
-  #   description: "辅助 Agent"
-  #   worktree: "TBD"
-  #   branch_prefix: "claude"
-  #   status: "pending"
-  #   joined_at: ""
-  #   capabilities:
-  #     - "代码开发"
-  #     - "代码审阅"
-  #   marker_file: ".agents/claude.marker"

@@ -1,0 +1,32 @@
+# 任务 001: 协作框架规范审阅与改造意见
+# 由 Opus (claude-opus-4.6) 创建
+
+task:
+  id: "001"
+  title: "协作框架规范审阅与改造意见"
+  type: "docs"
+  priority: "high"
+  status: "in-progress"
+
+  description: |
+    审阅当前多 Agent 协作框架的所有配置文件和规范文档，
+    检查规范的完整性、一致性和可操作性，
+    提出改造意见和优化建议。
+
+  acceptance_criteria:
+    - "完成对所有 .agents/ 配置文件的审阅"
+    - "识别出规范中的不一致和缺陷"
+    - "提出可落地的改造建议"
+    - "输出结构化的审阅报告"
+
+  assigned_to: ["opus"]
+  primary_agent: "opus"
+
+  branches:
+    opus: "opus/dev"
+
+  reviews: []
+
+  created_at: "2026-03-31"
+  updated_at: "2026-03-31"
+  completed_at: ""
