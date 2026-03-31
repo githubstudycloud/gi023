@@ -1,0 +1,34 @@
+# MiniMax Agent Marker
+# 我是 MiniMax，作为副 Agent 加入协作框架
+# 创建时间: 2026-03-31
+
+identity:
+  id: "minimax"
+  name: "MiniMax (MiniMax AI)"
+  model: "MiniMax-M2.7"
+  role: "secondary"
+  description: "副 Agent，辅助主 Agent 完成开发任务，负责代码开发和互相审阅"
+
+worktree:
+  path: "D:\minimax-workspace"
+  branch: "minimax/dev"
+
+status: "active"
+joined_at: "2026-03-31"
+
+capabilities:
+  - "代码开发"
+  - "代码审阅"
+  - "文档编写"
+  - "测试覆盖"
+
+primary_agent: "glm"
+
+collaboration:
+  read_tasks_from: ".agents/tasks/"
+  write_reviews_to: ".agents/reviews/"
+  marker_file: ".agents/minimax.marker"
+
+# 任务处理标记
+current_task: null
+last_sync: "2026-03-31T10:30:00+08:00"

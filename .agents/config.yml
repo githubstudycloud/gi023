@@ -13,14 +13,15 @@ branching:
   pattern: "{agent-id}/{task-type}/{task-name}"
   examples:
     - "glm/feature/user-auth"
+    - "minimax/feature/user-auth"
     - "claude/feature/user-auth"
-    - "gemini/feature/user-auth"
 
 # Worktree 策略
 worktree:
-  root: "D:\\2026033101"
+  root: "D:\2026033101"
   dirs:
-    glm: "D:\\2026033101"
+    glm: "D:\2026033101"
+    minimax: "D:\minimax-workspace"
     # 其他 agent 的 worktree 目录在加入时自动注册
 
 # 协作规则

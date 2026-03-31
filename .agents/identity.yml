@@ -9,8 +9,6 @@ agents:
     role: "primary"
     description: "主 Agent，负责任务分发、合并决策、流程管理"
     worktree: "D:\\2026033101"
-    worktree_dev: "D:\\glm-workspace"
-    dev_branch: "glm/dev"
     branch_prefix: "glm"
     status: "active"
     joined_at: "2026-03-31"
@@ -37,3 +35,24 @@ agents:
   #     - "代码开发"
   #     - "代码审阅"
   #   marker_file: ".agents/claude.marker"
+
+  # MiniMax Agent (副 Agent)
+  minimax:
+    id: "minimax"
+    name: "MiniMax (MiniMax AI)"
+    model: "MiniMax-M2.7"
+    role: "secondary"
+    description: "副 Agent，辅助主 Agent 完成开发任务，负责代码开发和互相审阅"
+    worktree: "D:\minimax-workspace"
+    worktree_dev: "D:\minimax-workspace"
+    dev_branch: "minimax/dev"
+    branch_prefix: "minimax"
+    status: "active"
+    joined_at: "2026-03-31"
+    capabilities:
+      - "代码开发"
+      - "代码审阅"
+      - "文档编写"
+      - "测试覆盖"
+    marker_file: ".agents/minimax.marker"
+    primary_agent: "glm"
