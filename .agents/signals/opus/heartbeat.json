@@ -1,0 +1,8 @@
+{
+  "agent": "opus",
+  "status": "active",
+  "timestamp": "2026-03-31T11:30:00+08:00",
+  "current_task": "002-refactor-framework",
+  "branch": "opus/dev",
+  "last_commit": ""
+}

@@ -1,0 +1,136 @@
+# =============================================================
+# Multi-Agent Collaboration Framework v2.0
+# =============================================================
+# 核心原则：
+#   1. 分散式 - 每个 Agent 独立文件，零冲突
+#   2. 幂等性 - 任何操作重复执行结果一致
+#   3. 无锁优先 - 通过文件隔离而非锁来避免竞争
+#   4. 约定优于配置 - 文件名即语义
+# =============================================================
+
+framework:
+  name: "multi-agent-collab"
+  version: "2.0.0"
+  created: "2026-03-31"
+  schema_version: 2
+
+# =============================================================
+# 角色定义
+# =============================================================
+roles:
+  primary:
+    description: "主 Agent，唯一有权合并到 main 的角色"
+    permissions:
+      - "merge_to_main"
+      - "create_task"
+      - "assign_task"
+      - "approve_merge"
+      - "modify_framework"
+    max_count: 1
+
+  secondary:
+    description: "副 Agent，独立开发 + 交叉审阅"
+    permissions:
+      - "create_task"       # 可以自己提任务
+      - "develop"
+      - "review"
+      - "propose_merge"     # 只能提议合并，不能直接合并
+    max_count: -1           # 不限数量
+
+# =============================================================
+# 分支策略
+# =============================================================
+branching:
+  protected:
+    - "main"                # 仅 primary 可合并
+  
+  agent_branches:
+    # 每个 Agent 拥有一个持久开发分支（绑定 worktree）
+    dev: "{agent-id}/dev"
+    # 具体任务从 dev 分出
+    task: "{agent-id}/task/{task-id}"
+    # 热修复
+    hotfix: "{agent-id}/hotfix/{description}"
+  
+  naming_rules:
+    - "分支名全小写，单词用连字符分隔"
+    - "agent-id 必须与 registry 中注册的 id 一致"
+    - "task-id 必须与 .agents/tasks/ 下的文件名前缀一致"
+
+# =============================================================
+# Worktree 策略
+# =============================================================
+worktree:
+  # 推荐目录布局（Windows）
+  # D:\{repo-name}\              <- main (bare or checkout)
+  # D:\{agent-id}-workspace\     <- {agent-id}/dev
+  recommended_pattern: "D:\\{agent-id}-workspace"
+  
+  # 也支持同目录操作（多个 Claude Code 实例共享一个目录）
+  # 此时不使用 worktree，改用分支切换 + stash 策略
+  shared_directory_mode:
+    enabled: true
+    description: |
+      当多个 AI CLI 在同一目录操作时：
+      1. 操作前必须获取文件锁 (.agents/locks/)
+      2. 操作完必须释放锁
+      3. 建议使用 worktree 隔离，但不强制
+
+# =============================================================
+# 协作规则（硬性约束）
+# =============================================================
+rules:
+  hard:
+    - "每个 Agent 只能修改 .agents/registry/{自己的id}.yml"
+    - "每个 Agent 只能修改 .agents/signals/{自己的id}/ 下的文件"
+    - "共享文件（README.md 等）的修改只能在自己的分支上进行"
+    - "main 分支合并只能由 primary Agent 执行"
+    - "所有提交必须包含 Co-Authored-By 标识 Agent 身份"
+    - "所有文本文件必须使用 UTF-8 编码"
+  
+  soft:
+    - "优先使用 worktree 隔离而非分支切换"
+    - "任务完成后尽快提交信号文件"
+    - "审阅意见应在 24h 内提交"
+
+# =============================================================
+# 任务生命周期
+# =============================================================
+task_lifecycle:
+  states:
+    - name: "open"
+      description: "任务已创建，等待认领"
+    - name: "claimed"
+      description: "Agent 已认领，正在开发"
+    - name: "done"
+      description: "Agent 自认开发完成"
+    - name: "reviewing"
+      description: "其他 Agent 正在审阅"
+    - name: "approved"
+      description: "审阅通过"
+    - name: "merged"
+      description: "已合并到 main"
+    - name: "rejected"
+      description: "审阅不通过，需返工"
+  
+  transitions:
+    open: ["claimed"]
+    claimed: ["done", "open"]      # 可以放弃认领
+    done: ["reviewing"]
+    reviewing: ["approved", "rejected"]
+    approved: ["merged"]
+    rejected: ["claimed"]           # 返工
+
+# =============================================================
+# 信号机制（替代轮询）
+# =============================================================
+signals:
+  description: |
+    Agent 之间通过在 .agents/signals/{agent-id}/ 下创建文件来通信。
+    其他 Agent 通过 git fetch + 检查文件来感知信号。
+  
+  types:
+    heartbeat: "{agent-id}-heartbeat.json"
+    task_done: "task-{task-id}-done.json"
+    review_ready: "review-{task-id}-for-{target-agent}.json"
+    merge_request: "merge-{task-id}.json"

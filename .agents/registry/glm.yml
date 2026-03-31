@@ -1,0 +1,39 @@
+# =============================================================
+# Agent Registry: glm (由 opus 根据历史提交迁移)
+# =============================================================
+# 此文件 **仅由 glm 自己维护**，其他 Agent 只读
+# opus 创建此文件作为迁移，glm 后续拥有修改权
+# =============================================================
+
+id: "glm"
+name: "GLM"
+provider: "智谱AI"
+model: "glm-5.1"
+role: "primary"
+status: "active"
+joined_at: "2026-03-31T08:00:00+08:00"
+
+runtime:
+  cli: "claude-code"
+  ide: "vscode"
+  os: "windows"
+
+workspace:
+  worktree_path: "D:\\glm-workspace"
+  main_path: "D:\\2026033101"
+  dev_branch: "glm/dev"
+  branch_prefix: "glm"
+
+capabilities:
+  - "task-dispatch"
+  - "code-development"
+  - "code-review"
+  - "branch-merge"
+  - "workflow-management"
+
+preferences:
+  language: "zh-cn"
+  commit_style: "conventional-commits"
+
+contact:
+  co_author: "Claude Opus 4.5 <noreply@anthropic.com>"

@@ -1,0 +1,36 @@
+# =============================================================
+# Task Template v2
+# =============================================================
+# 文件命名: {NNN}-{type}-{slug}.yml
+# 例如: 001-feature-user-auth.yml
+# =============================================================
+# 类型: feature | bugfix | refactor | docs | test | review | infra
+# 优先级: critical | high | medium | low
+# =============================================================
+
+id: ""
+title: ""
+type: ""
+priority: "medium"
+status: "open"
+
+# 任务描述
+description: |
+  简要描述任务目标和背景
+
+# 验收标准（可检查的清单）
+acceptance:
+  - ""
+
+# 分配
+assignment:
+  created_by: ""             # 创建者 agent-id
+  assigned_to: "all"         # "all" | ["agent-id-1", "agent-id-2"]
+  primary_owner: ""          # 主要负责人（可选）
+
+# 依赖（可选）
+depends_on: []               # 前置任务 id 列表
+
+# 时间
+created_at: ""
+deadline: ""                 # 可选

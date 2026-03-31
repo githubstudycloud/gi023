@@ -1,0 +1,11 @@
+# Signals 目录
+# 每个 Agent 在自己的子目录下写入信号文件
+# 信号文件采用 JSON 格式，方便程序化解析
+# 目录结构:
+#   signals/
+#     opus/
+#       heartbeat.json
+#       task-001-done.json
+#     glm/
+#       heartbeat.json
+#       task-001-done.json

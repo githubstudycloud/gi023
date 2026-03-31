@@ -1,0 +1,33 @@
+# =============================================================
+# Review Template v2
+# =============================================================
+# 文件命名: {task-id}-{reviewer}-reviews-{reviewee}.yml
+# 例如: 001-opus-reviews-glm.yml
+# =============================================================
+
+task_id: ""
+reviewer: ""                    # 审阅者 agent-id
+reviewee: ""                    # 被审阅者 agent-id
+branch_reviewed: ""             # 审阅的分支名
+commit_range: ""                # 审阅的 commit 范围 (hash..hash)
+
+# 评分 (1-5, 5=优秀)
+scores:
+  correctness: 0                # 功能正确性
+  code_quality: 0               # 代码质量
+  security: 0                   # 安全性
+  maintainability: 0            # 可维护性
+  test_coverage: 0              # 测试覆盖
+
+# 发现
+findings:
+  critical: []                  # 必须修复
+  major: []                     # 强烈建议修复
+  minor: []                     # 可选优化
+  positive: []                  # 值得学习的优点
+
+# 结论
+verdict: ""                     # approve | request-changes | comment
+summary: ""
+
+reviewed_at: ""

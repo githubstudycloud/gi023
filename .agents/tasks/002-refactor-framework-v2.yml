@@ -1,0 +1,39 @@
+id: "002"
+title: "框架 v2 重构：分散式注册 + 信号机制 + 多 CLI 支持"
+type: "refactor"
+priority: "critical"
+status: "done"
+
+description: |
+  将 v1 框架（单文件 identity.yml + marker 文件）重构为 v2：
+  - 分散式注册（每 Agent 一个独立 registry 文件，消除合并冲突）
+  - 信号机制（替代轮询，Agent 间通过 signals/ 目录通信）
+  - 文件锁机制（支持多 AI CLI 操作同一目录）
+  - 多 CLI 指令文件（copilot-instructions / .claude / .cursorrules / .aider）
+  - 统一编码规范（.gitattributes 强制 UTF-8 + LF）
+  
+  v1 问题总结：
+  1. identity.yml 单文件导致多 Agent 并行注册冲突
+  2. minimax 分支编码乱码
+  3. 无任务同步/通知机制
+  4. 分支策略定义与实际使用不一致
+  5. 无多 CLI 工具支持
+
+acceptance:
+  - "每个 Agent 拥有独立注册文件 .agents/registry/{id}.yml"
+  - "信号目录 .agents/signals/{id}/ 可用"
+  - "锁机制 .agents/locks/ 文档完备"
+  - "所有主流 AI CLI 有对应指令文件"
+  - ".gitattributes 强制编码规范"
+  - "ONBOARDING.md 新 Agent 可按步骤自助加入"
+  - "FRAMEWORK.yml 定义完整角色、规则、状态机"
+
+assignment:
+  created_by: "opus"
+  assigned_to: ["opus"]
+  primary_owner: "opus"
+
+depends_on: []
+
+created_at: "2026-03-31T11:30:00+08:00"
+deadline: "2026-03-31"
