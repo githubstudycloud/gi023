@@ -1,0 +1,5 @@
+# Maven 超期依赖迁移脚本 - Python 依赖
+# 安装: pip install -r requirements.txt
+
+requests>=2.28.0     # HTTP 请求（查询 Maven Central、下载 jar）
+lxml>=4.9.0          # XML 解析加速（可选，回退到标准库 xml.etree）

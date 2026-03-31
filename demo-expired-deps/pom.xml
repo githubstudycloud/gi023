@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.7.18</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.example</groupId>
+    <artifactId>demo-parent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>Demo Parent - Expired Deps Migration</name>
+    <description>演示多模块项目超期依赖本地 lib 迁移方案</description>
+
+    <modules>
+        <module>lib-expired</module>
+        <module>common</module>
+        <module>service-user</module>
+        <module>service-order</module>
+        <module>gateway</module>
+    </modules>
+
+    <properties>
+        <java.version>1.8</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- ============================================ -->
+        <!-- 正常依赖版本（未超期）                         -->
+        <!-- ============================================ -->
+        <mybatis-plus.version>3.5.3.1</mybatis-plus.version>
+        <druid.version>1.2.16</druid.version>
+        <knife4j.version>4.1.0</knife4j.version>
+        <hutool.version>5.8.18</hutool.version>
+
+        <!-- ============================================ -->
+        <!-- ⚠️ 超期依赖版本（> 3 年）                     -->
+        <!-- 迁移后这些版本仍在此管理，但 jar 来自本地仓库    -->
+        <!-- ============================================ -->
+        <guava.version>20.0</guava.version>                     <!-- 2016-10, 超期 -->
+        <commons-collections.version>3.2.2</commons-collections.version>  <!-- 2015-11, 超期 -->
+        <commons-io.version>2.6</commons-io.version>            <!-- 2017-10, 超期 -->
+        <fastjson.version>1.2.83</fastjson.version>             <!-- 2022-05, 可能超期 -->
+        <log4j-legacy.version>1.2.17</log4j-legacy.version>    <!-- 2012-05, 严重超期 -->
+        <ehcache.version>2.10.9.2</ehcache.version>            <!-- 2020-03, 接近超期 -->
+    </properties>
+
+    <!-- ============================================ -->
+    <!-- 本地仓库（存放超期 jar）                       -->
+    <!-- ============================================ -->
+    <repositories>
+        <repository>
+            <id>local-expired-repo</id>
+            <name>Local Repository for Expired Dependencies</name>
+            <url>file://${project.basedir}/repo-local</url>
+            <releases>
+                <enabled>true</enabled>
+                <checksumPolicy>ignore</checksumPolicy>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+
+    <!-- ============================================ -->
+    <!-- 统一版本管理                                   -->
+    <!-- ============================================ -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- === 内部模块 === -->
+            <dependency>
+                <groupId>com.example</groupId>
+                <artifactId>lib-expired</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.example</groupId>
+                <artifactId>common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.example</groupId>
+                <artifactId>service-order-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- === 正常依赖 === -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-boot-starter</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>druid-spring-boot-starter</artifactId>
+                <version>${druid.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.xiaoymin</groupId>
+                <artifactId>knife4j-openapi2-spring-boot-starter</artifactId>
+                <version>${knife4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.hutool</groupId>
+                <artifactId>hutool-all</artifactId>
+                <version>${hutool.version}</version>
+            </dependency>
+
+            <!-- === 超期依赖（jar 在 repo-local/ 中） === -->
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>${guava.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>commons-collections</groupId>
+                <artifactId>commons-collections</artifactId>
+                <version>${commons-collections.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>commons-io</groupId>
+                <artifactId>commons-io</artifactId>
+                <version>${commons-io.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>fastjson</artifactId>
+                <version>${fastjson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>log4j</groupId>
+                <artifactId>log4j</artifactId>
+                <version>${log4j-legacy.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>net.sf.ehcache</groupId>
+                <artifactId>ehcache</artifactId>
+                <version>${ehcache.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <configuration>
+                        <excludes>
+                            <exclude>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                            </exclude>
+                        </excludes>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+</project>

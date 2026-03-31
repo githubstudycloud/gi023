@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.example</groupId>
+        <artifactId>demo-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>lib-expired</artifactId>
+    <packaging>pom</packaging>
+    <name>Lib Expired - 超期依赖聚合模块</name>
+    <description>
+        本模块聚合所有超期依赖。其他模块只需依赖本模块即可传递获得所有超期包。
+        实际的 jar 文件存放在 ../repo-local/ 的 file-based Maven 仓库中。
+        
+        迁移策略：
+        1. Python 脚本自动下载超期 jar 到 repo-local/
+        2. 将超期依赖声明集中到本模块
+        3. common 和各 service 通过依赖本模块传递获得
+        4. 后续逐个替换为新版本时，只需修改本模块和 repo-local/
+    </description>
+
+    <!-- 
+        本模块聚合所有超期依赖。
+        packaging=pom 意味着它不产生 jar，只做依赖传递。
+        其他模块依赖 lib-expired 后，自动获得以下所有超期包。
+    -->
+    <dependencies>
+        <!-- ⚠️ 超期: guava 20.0 (2016-10) -->
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+        </dependency>
+
+        <!-- ⚠️ 超期: commons-collections 3.2.2 (2015-11) -->
+        <dependency>
+            <groupId>commons-collections</groupId>
+            <artifactId>commons-collections</artifactId>
+        </dependency>
+
+        <!-- ⚠️ 超期: commons-io 2.6 (2017-10) -->
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+        </dependency>
+
+        <!-- ⚠️ 超期: fastjson 1.2.83 (2022-05) -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>fastjson</artifactId>
+        </dependency>
+
+        <!-- ⚠️ 严重超期: log4j 1.2.17 (2012-05) -->
+        <dependency>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+        </dependency>
+
+        <!-- ⚠️ 接近超期: ehcache 2.10.9.2 (2020-03) -->
+        <dependency>
+            <groupId>net.sf.ehcache</groupId>
+            <artifactId>ehcache</artifactId>
+        </dependency>
+    </dependencies>
+
+</project>
