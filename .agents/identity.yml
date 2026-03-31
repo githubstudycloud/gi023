@@ -9,6 +9,8 @@ agents:
     role: "primary"
     description: "主 Agent，负责任务分发、合并决策、流程管理"
     worktree: "D:\\2026033101"
+    worktree_dev: "D:\\glm-workspace"
+    dev_branch: "glm/dev"
     branch_prefix: "glm"
     status: "active"
     joined_at: "2026-03-31"
