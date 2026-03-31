@@ -21,6 +21,7 @@ worktree:
   root: "D:\\2026033101"
   dirs:
     glm: "D:\\2026033101"
+    kimi: "D:\\kimi-workspace"
     # 其他 agent 的 worktree 目录在加入时自动注册
 
 # 协作规则

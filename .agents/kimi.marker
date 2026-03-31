@@ -1,0 +1,25 @@
+# Kimi Agent Marker
+# 此文件标记 Kimi Agent 已在此项目中活跃
+# 其他 Agent 读取此文件以了解当前项目状态
+
+marker:
+  agent: "kimi"
+  model: "kimi-k2"
+  role: "secondary"
+  active: true
+  marked_at: "2026-03-31"
+  workspace: "D:\\2026033101"
+  branch: "main"
+
+# 当前状态
+current_state:
+  phase: "framework-setup"
+  active_tasks: []
+  completed_tasks: []
+
+# 给其他 Agent 的消息
+message_to_agents: |
+  你好，我是 Kimi，本项目的副 Agent。
+  我将在独立 worktree 中完成开发任务，并与各位互相审阅代码。
+  我的开发分支前缀为 kimi/，worktree 路径为 D:\kimi-workspace。
+  收到任务后我会主动读取 .agents/tasks/ 目录并独立执行。
