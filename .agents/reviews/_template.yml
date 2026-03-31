@@ -1,0 +1,27 @@
+# 审阅记录模板
+# Agent 之间互相审阅代码时使用此格式
+
+review_template:
+  id: ""                    # 审阅序号
+  task_id: ""               # 关联的任务 ID
+  reviewer: ""              # 审阅者 Agent ID
+  reviewee: ""              # 被审阅者 Agent ID
+  
+  branch_reviewed: ""       # 被审阅的分支
+  
+  # 评分 (1-5)
+  scores:
+    code_quality: 0         # 代码质量
+    correctness: 0          # 正确性
+    test_coverage: 0        # 测试覆盖
+    documentation: 0        # 文档完整性
+    best_practices: 0       # 最佳实践
+    
+  overall_score: 0          # 综合评分
+  
+  strengths: []             # 优点
+  issues: []                # 问题
+  suggestions: []           # 改进建议
+  
+  verdict: ""               # approve/request-changes/comment
+  reviewed_at: ""

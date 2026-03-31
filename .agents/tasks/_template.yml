@@ -1,0 +1,46 @@
+# 任务管理模板
+# 此文件定义任务的创建和流转格式
+
+# === 任务文件命名规范 ===
+# 文件名格式: {序号}-{任务类型}-{简述}.yml
+# 例如: 001-feature-user-auth.yml
+#
+# === 任务类型 ===
+# feature  - 新功能
+# bugfix   - Bug修复
+# refactor - 重构
+# docs     - 文档
+# test     - 测试
+#
+# === 任务状态流转 ===
+# pending -> assigned -> in-progress -> review -> completed
+#                            |              |
+#                            v              v
+#                        blocked        revision-needed
+
+task_template:
+  id: ""                    # 自增序号
+  title: ""                 # 任务标题
+  type: ""                  # feature/bugfix/refactor/docs/test
+  priority: ""              # high/medium/low
+  status: "pending"         # pending/assigned/in-progress/review/completed/blocked/revision-needed
+  
+  description: |
+    详细描述任务内容
+    
+  acceptance_criteria:
+    - "验收标准1"
+    - "验收标准2"
+    
+  assigned_to: []           # 分配给哪些 Agent
+  primary_agent: ""         # 主负责 Agent（如果指定）
+  
+  branches:
+    glm: ""                 # glm 的开发分支
+    # claude: ""            # 其他 agent 的开发分支
+    
+  reviews: []               # 审阅记录引用
+  
+  created_at: ""
+  updated_at: ""
+  completed_at: ""

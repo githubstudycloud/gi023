@@ -1,0 +1,50 @@
+# Agent 协作配置
+# 本文件定义多 Agent 协作框架的规则和流程
+
+framework:
+  name: "multi-agent-collab"
+  version: "1.0.0"
+  created: "2026-03-31"
+  maintainer: "rdymaa05"
+
+# 分支策略
+branching:
+  main_branch: "main"
+  pattern: "{agent-id}/{task-type}/{task-name}"
+  examples:
+    - "glm/feature/user-auth"
+    - "claude/feature/user-auth"
+    - "gemini/feature/user-auth"
+
+# Worktree 策略
+worktree:
+  root: "D:\\2026033101"
+  dirs:
+    glm: "D:\\2026033101"
+    # 其他 agent 的 worktree 目录在加入时自动注册
+
+# 协作规则
+rules:
+  - 每个 Agent 必须在 .agents/identity.yml 中标记自己
+  - 每个 Agent 在自己的分支上开发，不直接修改 main
+  - 任务文件放在 .agents/tasks/ 目录下
+  - 审阅记录放在 .agents/reviews/ 目录下
+  - 主 Agent (GLM) 负责任务分发和合并
+  - 所有 Agent 收到相同任务后各自独立完成
+  - Agent 之间互相审阅代码（cross-review）
+  - 只有主 Agent 可以合并到 main 分支
+
+# 任务流转
+workflow:
+  - step: "dispatch"
+    description: "主 Agent 创建任务文件到 .agents/tasks/"
+    actor: "glm"
+  - step: "develop"
+    description: "所有 Agent 从各自分支读取任务并开发"
+    actor: "all-agents"
+  - step: "cross-review"
+    description: "Agent 之间互相审阅代码，记录到 .agents/reviews/"
+    actor: "all-agents"
+  - step: "merge"
+    description: "主 Agent 选择最优实现，合并到 main"
+    actor: "glm"
