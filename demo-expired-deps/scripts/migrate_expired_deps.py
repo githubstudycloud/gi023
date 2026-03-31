@@ -5,19 +5,40 @@ Maven 超期依赖自动迁移工具
 ===========================
 
 功能：
-  1. scan   - 扫描多模块 Maven 项目，识别超过 N 年的依赖
-  2. migrate - 自动将超期依赖迁移到 lib-expired 模块 + 本地仓库
+  1. scan     - 扫描多模块 Maven 项目，识别超过 N 年的依赖
+  2. migrate  - 自动将超期依赖迁移到 lib-expired 模块 + 本地仓库
   3. download - 下载超期 jar 到 repo-local 文件仓库
-  4. report  - 生成 Excel/CSV 报告
+  4. report   - 生成 Excel/CSV 报告
+  5. build-db - 从本地 Maven 缓存构建日期数据库文件
 
-用法：
-  python migrate_expired_deps.py scan    --project-dir ../
-  python migrate_expired_deps.py migrate --project-dir ../ --dry-run
-  python migrate_expired_deps.py migrate --project-dir ../
-  python migrate_expired_deps.py download --project-dir ../
-  python migrate_expired_deps.py report  --project-dir ../ --output report.csv
+日期检测策略（按优先级自动切换）：
+  1. 内置已知数据库（KNOWN_EXPIRED_DB）
+  2. 用户自定义数据库文件（--date-db deps_dates.json）
+  3. 本地 Maven 缓存 ~/.m2/repository（--m2-cache）
+  4. 内网镜像 maven-metadata.xml（--mirror-url）
+  5. 内网镜像 HTTP Last-Modified 头（--mirror-url 自动启用）
+  6. Nexus 3 REST API（--mirror-url + --mirror-type nexus3）
+  7. Maven Central Search API（默认，外网环境）
 
-依赖：pip install requests lxml
+典型用法（内网）：
+  # 方式 1：用本地 Maven 缓存（无需网络，最快）
+  python migrate_expired_deps.py scan -d ../ --m2-cache
+
+  # 方式 2：用内网镜像源的 metadata
+  python migrate_expired_deps.py scan -d ../ --mirror-url http://nexus.corp.com/repository/maven-public
+
+  # 方式 3：内网 Nexus 3 API（最准确）
+  python migrate_expired_deps.py scan -d ../ --mirror-url http://nexus.corp.com --mirror-type nexus3
+
+  # 方式 4：先构建日期数据库，再离线使用
+  python migrate_expired_deps.py build-db --m2-cache -o deps_dates.json
+  python migrate_expired_deps.py scan -d ../ --date-db deps_dates.json
+
+典型用法（外网）：
+  python migrate_expired_deps.py scan -d ../
+  python migrate_expired_deps.py migrate -d ../ --dry-run
+
+依赖：pip install requests（可选，离线模式不需要）
 """
 
 import argparse
@@ -70,6 +91,400 @@ KNOWN_EXPIRED_DB = {
     ("mysql", "mysql-connector-java", "5.1.49"): "2020-04-27",
     ("org.apache.httpcomponents", "httpclient", "4.5.13"): "2020-09-09",
 }
+
+# ──────────────────────────────────────────────
+# 日期检测策略（可插拔，支持内网环境）
+# ──────────────────────────────────────────────
+
+class DateDetector:
+    """日期检测策略基类"""
+    name = "base"
+
+    def detect(self, group_id, artifact_id, version):
+        """检测发布日期，返回 'YYYY-MM-DD' 字符串或 None"""
+        raise NotImplementedError
+
+
+class KnownDatabaseDetector(DateDetector):
+    """策略 1：内置已知数据库"""
+    name = "known-db"
+
+    def detect(self, group_id, artifact_id, version):
+        return KNOWN_EXPIRED_DB.get((group_id, artifact_id, version))
+
+
+class CustomDatabaseDetector(DateDetector):
+    """
+    策略 2：用户自定义 JSON 数据库文件
+    
+    文件格式（deps_dates.json）：
+    {
+      "com.google.guava:guava:20.0": "2016-10-28",
+      "commons-io:commons-io:2.6": "2018-10-15"
+    }
+    
+    或者带注释的详细格式：
+    {
+      "dependencies": {
+        "com.google.guava:guava:20.0": {
+          "date": "2016-10-28",
+          "note": "升级到 33.x"
+        }
+      }
+    }
+    """
+    name = "custom-db"
+
+    def __init__(self, db_path):
+        self._db = {}
+        self._load(db_path)
+
+    def _load(self, db_path):
+        path = Path(db_path)
+        if not path.exists():
+            LOG.warning(f"日期数据库文件不存在: {db_path}")
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            # 支持两种格式
+            if "dependencies" in data and isinstance(data["dependencies"], dict):
+                for coord, info in data["dependencies"].items():
+                    if isinstance(info, str):
+                        self._db[coord] = info
+                    elif isinstance(info, dict):
+                        self._db[coord] = info.get("date", "")
+            elif isinstance(data, dict):
+                for coord, date_str in data.items():
+                    if isinstance(date_str, str):
+                        self._db[coord] = date_str
+            LOG.info(f"已加载自定义日期数据库: {len(self._db)} 条记录")
+        except (json.JSONDecodeError, KeyError) as e:
+            LOG.warning(f"日期数据库解析失败: {e}")
+
+    def detect(self, group_id, artifact_id, version):
+        coord = f"{group_id}:{artifact_id}:{version}"
+        return self._db.get(coord)
+
+
+class LocalM2CacheDetector(DateDetector):
+    """
+    策略 3：扫描本地 Maven 缓存 (~/.m2/repository)
+    
+    Maven 下载 jar 时通常保留原始文件的修改时间，
+    该时间接近发布日期（可能有几天偏差，但足够判断是否超期）。
+    
+    如果 jar 附带 _remote.repositories 标记文件，也会参考。
+    """
+    name = "m2-cache"
+
+    def __init__(self, m2_path=None):
+        if m2_path:
+            self._m2_repo = Path(m2_path)
+        else:
+            # 自动检测 ~/.m2/repository
+            home = Path.home()
+            self._m2_repo = home / ".m2" / "repository"
+        if not self._m2_repo.exists():
+            LOG.warning(f"Maven 本地缓存不存在: {self._m2_repo}")
+
+    def detect(self, group_id, artifact_id, version):
+        if not self._m2_repo.exists():
+            return None
+
+        group_path = group_id.replace(".", os.sep)
+        artifact_dir = self._m2_repo / group_path / artifact_id / version
+        if not artifact_dir.exists():
+            return None
+
+        # 优先查 jar，其次 pom
+        jar_file = artifact_dir / f"{artifact_id}-{version}.jar"
+        pom_file = artifact_dir / f"{artifact_id}-{version}.pom"
+
+        target = jar_file if jar_file.exists() else (pom_file if pom_file.exists() else None)
+        if target is None:
+            return None
+
+        mtime = target.stat().st_mtime
+        return datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+
+
+class MavenMetadataDetector(DateDetector):
+    """
+    策略 4：从 Maven 仓库（镜像源）的 maven-metadata.xml 获取日期
+    
+    所有 Maven 仓库管理器（Nexus、Artifactory、普通 HTTP 文件服务器）都提供此文件。
+    路径: {repo-url}/{groupPath}/{artifactId}/maven-metadata.xml
+    
+    内容示例：
+    <metadata>
+      <versioning>
+        <versions>
+          <version>20.0</version>
+        </versions>
+        <lastUpdated>20161028035018</lastUpdated>
+      </versioning>
+    </metadata>
+    
+    注意：lastUpdated 是最近一个版本的更新时间，不精确对应特定版本。
+    更精确的做法是查询 version 级别的 maven-metadata.xml（如果有的话）。
+    """
+    name = "maven-metadata"
+
+    def __init__(self, mirror_url):
+        self._mirror_url = mirror_url.rstrip("/")
+
+    def detect(self, group_id, artifact_id, version):
+        if not HAS_REQUESTS:
+            return None
+
+        group_path = group_id.replace(".", "/")
+
+        # 尝试 version 级别的 metadata（部分仓库提供）
+        ver_metadata_url = (
+            f"{self._mirror_url}/{group_path}/{artifact_id}"
+            f"/{version}/maven-metadata.xml"
+        )
+        date = self._parse_metadata_url(ver_metadata_url)
+        if date:
+            return date
+
+        # 回退到 artifact 级别的 metadata
+        artifact_metadata_url = (
+            f"{self._mirror_url}/{group_path}/{artifact_id}/maven-metadata.xml"
+        )
+        return self._parse_metadata_url(artifact_metadata_url)
+
+    def _parse_metadata_url(self, url):
+        try:
+            resp = requests.get(url, timeout=10)
+            if resp.status_code != 200:
+                return None
+            root = ET.fromstring(resp.content)
+            # 查找 <lastUpdated> 标签（无命名空间）
+            last_updated = root.findtext(".//lastUpdated")
+            if last_updated and len(last_updated) >= 8:
+                # 格式: 20161028035018 → 2016-10-28
+                return f"{last_updated[:4]}-{last_updated[4:6]}-{last_updated[6:8]}"
+        except Exception as e:
+            LOG.debug(f"metadata 查询失败 {url}: {e}")
+        return None
+
+
+class HttpLastModifiedDetector(DateDetector):
+    """
+    策略 5：通过 HTTP HEAD 请求获取 artifact 的 Last-Modified 日期
+    
+    几乎所有 HTTP 服务器都返回 Last-Modified 头。
+    对镜像源发出 HEAD 请求（不下载内容），读取 Last-Modified 响应头。
+    """
+    name = "http-last-modified"
+
+    def __init__(self, mirror_url):
+        self._mirror_url = mirror_url.rstrip("/")
+
+    def detect(self, group_id, artifact_id, version):
+        if not HAS_REQUESTS:
+            return None
+
+        group_path = group_id.replace(".", "/")
+        # 优先查 jar，再查 pom
+        for ext in (".jar", ".pom"):
+            url = (
+                f"{self._mirror_url}/{group_path}/{artifact_id}"
+                f"/{version}/{artifact_id}-{version}{ext}"
+            )
+            date = self._head_last_modified(url)
+            if date:
+                return date
+        return None
+
+    def _head_last_modified(self, url):
+        try:
+            resp = requests.head(url, timeout=10, allow_redirects=True)
+            if resp.status_code != 200:
+                return None
+            lm = resp.headers.get("Last-Modified")
+            if lm:
+                # 格式: "Fri, 28 Oct 2016 03:50:18 GMT"
+                from email.utils import parsedate_to_datetime
+                dt = parsedate_to_datetime(lm)
+                return dt.strftime("%Y-%m-%d")
+        except Exception as e:
+            LOG.debug(f"HEAD 查询失败 {url}: {e}")
+        return None
+
+
+class Nexus3ApiDetector(DateDetector):
+    """
+    策略 6：Nexus 3 REST API
+    
+    Nexus 3 提供 /service/rest/v1/search 接口，类似 Maven Central Search。
+    URL: {nexus-url}/service/rest/v1/search?group={g}&name={a}&version={v}
+    
+    响应中 items[].assets[].lastModified 包含精确时间。
+    """
+    name = "nexus3-api"
+
+    def __init__(self, nexus_url, repository=None):
+        self._nexus_url = nexus_url.rstrip("/")
+        self._repository = repository  # 如 "maven-public"
+
+    def detect(self, group_id, artifact_id, version):
+        if not HAS_REQUESTS:
+            return None
+        try:
+            params = {
+                "group": group_id,
+                "name": artifact_id,
+                "version": version,
+            }
+            if self._repository:
+                params["repository"] = self._repository
+
+            url = f"{self._nexus_url}/service/rest/v1/search"
+            resp = requests.get(url, params=params, timeout=10)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            items = data.get("items", [])
+            if items:
+                # 取第一个 asset 的 lastModified
+                assets = items[0].get("assets", [])
+                if assets:
+                    lm = assets[0].get("lastModified", "")
+                    # 格式: "2016-10-28T03:50:18.000+00:00"
+                    if lm and len(lm) >= 10:
+                        return lm[:10]
+            time.sleep(0.2)
+        except Exception as e:
+            LOG.debug(f"Nexus API 查询失败: {e}")
+        return None
+
+
+class MavenCentralSearchDetector(DateDetector):
+    """策略 7：Maven Central Search API（外网环境）"""
+    name = "maven-central"
+
+    def detect(self, group_id, artifact_id, version):
+        if not HAS_REQUESTS:
+            return None
+        try:
+            params = {
+                "q": f'g:"{group_id}" AND a:"{artifact_id}" AND v:"{version}"',
+                "rows": 1,
+                "wt": "json",
+            }
+            resp = requests.get(MAVEN_CENTRAL_SEARCH, params=params, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                docs = data.get("response", {}).get("docs", [])
+                if docs:
+                    ts = docs[0].get("timestamp", 0)
+                    if ts:
+                        return datetime.fromtimestamp(ts / 1000).strftime("%Y-%m-%d")
+            time.sleep(0.3)
+        except Exception as e:
+            LOG.debug(f"Maven Central 查询失败 {group_id}:{artifact_id}:{version}: {e}")
+        return None
+
+
+class DateDetectorChain:
+    """
+    日期检测策略链
+    
+    按优先级逐个尝试，第一个成功返回的即为最终结果。
+    """
+
+    def __init__(self):
+        self._detectors = []
+
+    def add(self, detector):
+        self._detectors.append(detector)
+        return self
+
+    def detect(self, group_id, artifact_id, version):
+        for detector in self._detectors:
+            result = detector.detect(group_id, artifact_id, version)
+            if result:
+                LOG.debug(f"  日期来源 [{detector.name}]: "
+                          f"{group_id}:{artifact_id}:{version} → {result}")
+                return result
+        return None
+
+    def describe(self):
+        return " → ".join(d.name for d in self._detectors)
+
+
+def build_date_db_from_m2(m2_path=None, project_dir=None, output_path=None):
+    """
+    从本地 Maven 缓存构建日期数据库文件
+    
+    如果指定了 project_dir，只扫描该项目用到的依赖。
+    否则扫描整个 ~/.m2/repository（可能很大）。
+    """
+    m2_repo = Path(m2_path) if m2_path else Path.home() / ".m2" / "repository"
+    if not m2_repo.exists():
+        LOG.error(f"Maven 缓存不存在: {m2_repo}")
+        return
+
+    db = {}
+
+    if project_dir:
+        # 只扫描项目依赖
+        scanner = ProjectScanner(project_dir)
+        scanner.scan()
+        unique = scanner._deduplicate()
+        LOG.info(f"从项目中发现 {len(unique)} 个唯一依赖，开始查询本地缓存...")
+
+        detector = LocalM2CacheDetector(str(m2_repo))
+        for dep in unique:
+            if dep.version == "(inherited)":
+                continue
+            date = detector.detect(dep.group_id, dep.artifact_id, dep.version)
+            if date:
+                coord = f"{dep.group_id}:{dep.artifact_id}:{dep.version}"
+                db[coord] = date
+    else:
+        # 扫描整个 m2 缓存
+        LOG.info(f"扫描整个 Maven 缓存: {m2_repo}")
+        count = 0
+        for root, dirs, files in os.walk(m2_repo):
+            for f in files:
+                if not f.endswith(".jar") or f.endswith("-sources.jar") or f.endswith("-javadoc.jar"):
+                    continue
+                jar_path = Path(root) / f
+                # 从路径反推坐标: .m2/repo/{g}/{a}/{v}/{a}-{v}.jar
+                try:
+                    rel = jar_path.relative_to(m2_repo)
+                    parts = list(rel.parts)
+                    if len(parts) < 4:
+                        continue
+                    version = parts[-2]
+                    artifact_id = parts[-3]
+                    group_id = ".".join(parts[:-3])
+                    expected_name = f"{artifact_id}-{version}.jar"
+                    if f != expected_name:
+                        continue
+                    mtime = jar_path.stat().st_mtime
+                    date_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+                    coord = f"{group_id}:{artifact_id}:{version}"
+                    db[coord] = date_str
+                    count += 1
+                except (ValueError, IndexError):
+                    continue
+        LOG.info(f"共扫描到 {count} 个 jar 文件")
+
+    if output_path:
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(db, f, indent=2, ensure_ascii=False)
+        LOG.info(f"日期数据库已保存: {output_path} ({len(db)} 条记录)")
+    else:
+        # 输出到控制台
+        print(json.dumps(db, indent=2, ensure_ascii=False))
+
+    return db
+
 
 LOG = logging.getLogger("migrate")
 
@@ -194,7 +609,8 @@ class DependencyInfo:
 class ProjectScanner:
     """扫描多模块 Maven 项目"""
 
-    def __init__(self, project_dir, max_age_years=DEFAULT_MAX_AGE_YEARS):
+    def __init__(self, project_dir, max_age_years=DEFAULT_MAX_AGE_YEARS,
+                 date_chain=None):
         self.project_dir = Path(project_dir).resolve()
         self.max_age_years = max_age_years
         self.cutoff_date = datetime.now() - timedelta(days=max_age_years * 365)
@@ -203,12 +619,24 @@ class ProjectScanner:
         self.expired_deps = []
         self.internal_artifacts = set()
         self._date_cache = {}
+        # 日期检测策略链
+        self._date_chain = date_chain or self._default_chain()
+
+    @staticmethod
+    def _default_chain():
+        """默认策略链：内置数据库 → Maven Central"""
+        chain = DateDetectorChain()
+        chain.add(KnownDatabaseDetector())
+        if HAS_REQUESTS:
+            chain.add(MavenCentralSearchDetector())
+        return chain
 
     def scan(self):
         """执行全量扫描"""
         LOG.info("=" * 60)
         LOG.info(f"扫描项目: {self.project_dir}")
         LOG.info(f"超期阈值: {self.max_age_years} 年 (截止 {self.cutoff_date.strftime('%Y-%m-%d')})")
+        LOG.info(f"检测策略: {self._date_chain.describe()}")
         LOG.info("=" * 60)
 
         # 1. 找到所有 pom.xml
@@ -348,19 +776,17 @@ class ProjectScanner:
         return list(seen.values())
 
     def _check_expiry(self, dep):
-        """检查单个依赖是否超期"""
+        """检查单个依赖是否超期（通过策略链）"""
         key = dep.key
 
-        # 先查本地缓存
+        # 先查本地缓存（避免重复查询）
         if key in self._date_cache:
             dep.release_date = self._date_cache[key]
-        # 再查已知数据库
-        elif key in KNOWN_EXPIRED_DB:
-            dep.release_date = KNOWN_EXPIRED_DB[key]
-            self._date_cache[key] = dep.release_date
-        # 最后查 Maven Central
-        elif HAS_REQUESTS and dep.version != "(inherited)":
-            dep.release_date = self._query_maven_central(dep)
+        elif dep.version != "(inherited)":
+            # 通过策略链检测
+            dep.release_date = self._date_chain.detect(
+                dep.group_id, dep.artifact_id, dep.version
+            )
             self._date_cache[key] = dep.release_date
 
         if dep.release_date:
@@ -372,27 +798,6 @@ class ProjectScanner:
             except ValueError:
                 pass
 
-    def _query_maven_central(self, dep):
-        """通过 Maven Central Search API 查询发布日期"""
-        try:
-            params = {
-                "q": f'g:"{dep.group_id}" AND a:"{dep.artifact_id}" AND v:"{dep.version}"',
-                "rows": 1,
-                "wt": "json",
-            }
-            resp = requests.get(MAVEN_CENTRAL_SEARCH, params=params, timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                docs = data.get("response", {}).get("docs", [])
-                if docs:
-                    ts = docs[0].get("timestamp", 0)
-                    if ts:
-                        return datetime.fromtimestamp(ts / 1000).strftime("%Y-%m-%d")
-            time.sleep(0.3)  # 限流
-        except Exception as e:
-            LOG.debug(f"Maven Central 查询失败 {dep.coord}: {e}")
-        return None
-
 
 # ──────────────────────────────────────────────
 # 迁移执行器
@@ -401,12 +806,13 @@ class ProjectScanner:
 class MigrationExecutor:
     """执行超期依赖迁移"""
 
-    def __init__(self, project_dir, scanner):
+    def __init__(self, project_dir, scanner, mirror_url=None):
         self.project_dir = Path(project_dir).resolve()
         self.scanner = scanner
         self.lib_expired_pom = self.project_dir / "lib-expired" / "pom.xml"
         self.repo_local_dir = self.project_dir / "repo-local"
         self.parent_pom = self.project_dir / "pom.xml"
+        self.mirror_url = mirror_url.rstrip("/") if mirror_url else None
 
     def migrate(self, dry_run=False):
         """执行迁移"""
@@ -564,7 +970,8 @@ class MigrationExecutor:
         base_dir.mkdir(parents=True, exist_ok=True)
 
         base_name = f"{dep.artifact_id}-{dep.version}"
-        base_url = f"{MAVEN_CENTRAL_REPO}/{group_path}/{dep.artifact_id}/{dep.version}"
+        repo_base = self.mirror_url or MAVEN_CENTRAL_REPO
+        base_url = f"{repo_base}/{group_path}/{dep.artifact_id}/{dep.version}"
 
         for ext in (".jar", ".pom"):
             target_file = base_dir / f"{base_name}{ext}"
@@ -669,17 +1076,92 @@ def print_scan_result(scanner):
 # CLI
 # ──────────────────────────────────────────────
 
+def _add_common_args(parser):
+    """为所有子命令添加通用参数"""
+    parser.add_argument("--project-dir", "-d", required=True, help="项目根目录")
+    parser.add_argument("--max-age", type=int, default=DEFAULT_MAX_AGE_YEARS,
+                        help=f"超期年限阈值 (默认: {DEFAULT_MAX_AGE_YEARS})")
+    parser.add_argument("--offline", action="store_true",
+                        help="离线模式（禁用所有网络请求）")
+    # 内网镜像源相关
+    parser.add_argument("--mirror-url", metavar="URL",
+                        help="内网 Maven 镜像源地址 (如 http://nexus.corp.com/repository/maven-public)")
+    parser.add_argument("--mirror-type", choices=["auto", "nexus3", "generic"],
+                        default="auto",
+                        help="镜像源类型: auto=自动探测, nexus3=Nexus3 API, generic=仅用metadata+header (默认: auto)")
+    parser.add_argument("--nexus-repo", metavar="NAME",
+                        help="Nexus 3 仓库名 (如 maven-public，仅 --mirror-type nexus3 时有效)")
+    # 日期数据库
+    parser.add_argument("--date-db", metavar="FILE",
+                        help="自定义日期数据库 JSON 文件路径")
+    # 本地缓存
+    parser.add_argument("--m2-cache", action="store_true",
+                        help="启用本地 Maven 缓存 (~/.m2/repository) 日期检测")
+    parser.add_argument("--m2-path", metavar="DIR",
+                        help="自定义 Maven 本地缓存路径 (默认: ~/.m2/repository)")
+
+
+def _build_date_chain(args):
+    """根据 CLI 参数构建日期检测策略链"""
+    chain = DateDetectorChain()
+
+    # 1. 始终包含内置数据库（最快、无开销）
+    chain.add(KnownDatabaseDetector())
+
+    # 2. 用户自定义数据库
+    if getattr(args, "date_db", None):
+        chain.add(CustomDatabaseDetector(args.date_db))
+
+    # 3. 本地 Maven 缓存
+    if getattr(args, "m2_cache", False) or getattr(args, "m2_path", None):
+        chain.add(LocalM2CacheDetector(getattr(args, "m2_path", None)))
+
+    # 以下策略需要网络
+    if not getattr(args, "offline", False) and HAS_REQUESTS:
+        mirror_url = getattr(args, "mirror_url", None)
+        mirror_type = getattr(args, "mirror_type", "auto")
+
+        if mirror_url:
+            # 4. Nexus 3 API
+            if mirror_type == "nexus3":
+                chain.add(Nexus3ApiDetector(mirror_url, getattr(args, "nexus_repo", None)))
+            elif mirror_type == "auto":
+                # 自动探测：尝试 Nexus 3 API 端点
+                chain.add(Nexus3ApiDetector(mirror_url, getattr(args, "nexus_repo", None)))
+
+            # 5. maven-metadata.xml（通用，所有仓库都支持）
+            chain.add(MavenMetadataDetector(mirror_url))
+
+            # 6. HTTP Last-Modified 头（通用兜底）
+            chain.add(HttpLastModifiedDetector(mirror_url))
+        else:
+            # 无镜像源 URL → 用 Maven Central（外网环境）
+            chain.add(MavenCentralSearchDetector())
+
+    return chain
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Maven 超期依赖自动迁移工具",
+        description="Maven 超期依赖自动迁移工具（支持内网环境）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-示例:
-  %(prog)s scan    --project-dir ./demo-expired-deps
-  %(prog)s migrate --project-dir ./demo-expired-deps --dry-run
-  %(prog)s migrate --project-dir ./demo-expired-deps
-  %(prog)s download --project-dir ./demo-expired-deps
-  %(prog)s report  --project-dir ./demo-expired-deps -o report.csv
+示例（外网）:
+  %(prog)s scan    -d ./demo-expired-deps
+  %(prog)s migrate -d ./demo-expired-deps --dry-run
+
+示例（内网 - 本地 Maven 缓存）:
+  %(prog)s scan -d ./ --m2-cache
+  %(prog)s scan -d ./ --m2-cache --m2-path D:/maven-repo
+
+示例（内网 - 镜像源）:
+  %(prog)s scan -d ./ --mirror-url http://nexus.corp.com/repository/maven-public
+  %(prog)s scan -d ./ --mirror-url http://nexus.corp.com --mirror-type nexus3
+
+示例（内网 - 日期数据库）:
+  %(prog)s build-db --m2-cache -o deps_dates.json
+  %(prog)s build-db --m2-cache -d ./ -o deps_dates.json
+  %(prog)s scan -d ./ --date-db deps_dates.json
         """,
     )
 
@@ -687,31 +1169,36 @@ def main():
 
     # scan
     p_scan = subparsers.add_parser("scan", help="扫描超期依赖")
-    p_scan.add_argument("--project-dir", "-d", required=True, help="项目根目录")
-    p_scan.add_argument("--max-age", type=int, default=DEFAULT_MAX_AGE_YEARS,
-                        help=f"超期年限阈值 (默认: {DEFAULT_MAX_AGE_YEARS})")
-    p_scan.add_argument("--offline", action="store_true",
-                        help="离线模式（仅用本地数据库）")
+    _add_common_args(p_scan)
 
     # migrate
     p_migrate = subparsers.add_parser("migrate", help="执行迁移")
-    p_migrate.add_argument("--project-dir", "-d", required=True, help="项目根目录")
-    p_migrate.add_argument("--max-age", type=int, default=DEFAULT_MAX_AGE_YEARS)
+    _add_common_args(p_migrate)
     p_migrate.add_argument("--dry-run", action="store_true", help="仅预览，不执行")
-    p_migrate.add_argument("--offline", action="store_true")
 
     # download
     p_download = subparsers.add_parser("download", help="仅下载超期 jar 到本地仓库")
-    p_download.add_argument("--project-dir", "-d", required=True, help="项目根目录")
-    p_download.add_argument("--max-age", type=int, default=DEFAULT_MAX_AGE_YEARS)
-    p_download.add_argument("--offline", action="store_true")
+    _add_common_args(p_download)
 
     # report
     p_report = subparsers.add_parser("report", help="生成报告")
-    p_report.add_argument("--project-dir", "-d", required=True, help="项目根目录")
-    p_report.add_argument("--max-age", type=int, default=DEFAULT_MAX_AGE_YEARS)
+    _add_common_args(p_report)
     p_report.add_argument("--output", "-o", default="expired_deps_report.csv")
-    p_report.add_argument("--offline", action="store_true")
+
+    # build-db（新命令）
+    p_build = subparsers.add_parser("build-db",
+                                     help="从本地 Maven 缓存构建日期数据库")
+    p_build.add_argument("--project-dir", "-d", default=None,
+                         help="项目根目录（指定则只扫描项目依赖，否则扫描全部缓存）")
+    p_build.add_argument("--m2-cache", action="store_true", default=True,
+                         help="使用本地 Maven 缓存（默认启用）")
+    p_build.add_argument("--m2-path", metavar="DIR",
+                         help="自定义 Maven 本地缓存路径")
+    p_build.add_argument("--output", "-o", default=None,
+                         help="输出 JSON 文件路径（不指定则输出到控制台）")
+    p_build.add_argument("--mirror-url", metavar="URL",
+                         help="同时从镜像源补充日期数据")
+    p_build.add_argument("--offline", action="store_true")
 
     args = parser.parse_args()
 
@@ -726,10 +1213,24 @@ def main():
     global HAS_REQUESTS
     if getattr(args, "offline", False):
         HAS_REQUESTS = False
-        LOG.info("📡 离线模式：仅使用本地数据库")
+        LOG.info("📡 离线模式：禁用所有网络请求")
+
+    # build-db 命令特殊处理
+    if args.command == "build-db":
+        build_date_db_from_m2(
+            m2_path=getattr(args, "m2_path", None),
+            project_dir=getattr(args, "project_dir", None),
+            output_path=getattr(args, "output", None),
+        )
+        return
+
+    # 构建策略链
+    date_chain = _build_date_chain(args)
+    LOG.info(f"📡 日期检测策略链: {date_chain.describe()}")
 
     # 扫描
-    scanner = ProjectScanner(args.project_dir, args.max_age)
+    scanner = ProjectScanner(args.project_dir, args.max_age,
+                             date_chain=date_chain)
     scanner.scan()
 
     if args.command == "scan":
@@ -737,12 +1238,14 @@ def main():
 
     elif args.command == "migrate":
         print_scan_result(scanner)
-        executor = MigrationExecutor(args.project_dir, scanner)
+        mirror = getattr(args, "mirror_url", None)
+        executor = MigrationExecutor(args.project_dir, scanner, mirror_url=mirror)
         executor.migrate(dry_run=args.dry_run)
 
     elif args.command == "download":
         print_scan_result(scanner)
-        executor = MigrationExecutor(args.project_dir, scanner)
+        mirror = getattr(args, "mirror_url", None)
+        executor = MigrationExecutor(args.project_dir, scanner, mirror_url=mirror)
         for dep in scanner.expired_deps:
             if dep.version != "(inherited)":
                 executor._download_to_repo_local(dep)
