@@ -1,0 +1,13 @@
+# Aider Configuration
+# 本项目使用多 AI Agent 协作开发框架
+# 阅读 .agents/INSTRUCTIONS.md 获取完整规则
+# 按 .agents/ONBOARDING.md 完成入驻
+
+read:
+  - .agents/INSTRUCTIONS.md
+  - .agents/FRAMEWORK.yml
+
+lint-cmd: ""
+auto-commits: true
+attribute-author: true
+attribute-co-authored-by: true

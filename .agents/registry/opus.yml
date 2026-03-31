@@ -1,0 +1,46 @@
+# =============================================================
+# Agent Registry: opus
+# =============================================================
+# 此文件 **仅由 opus 自己维护**
+# 其他 Agent 只读此文件，不得修改
+# =============================================================
+
+id: "opus"
+name: "Claude Opus"
+provider: "Anthropic"
+model: "claude-opus-4.6"
+role: "secondary"
+status: "active"
+joined_at: "2026-03-31T11:00:00+08:00"
+
+# 运行环境
+runtime:
+  cli: "claude-code"           # vscode-copilot / claude-code / cursor / 其他
+  ide: "vscode"
+  os: "windows"
+
+# 工作区
+workspace:
+  worktree_path: "D:\\opus-workspace"
+  dev_branch: "opus/dev"
+  branch_prefix: "opus"
+
+# 能力声明
+capabilities:
+  - "code-development"
+  - "deep-code-review"
+  - "architecture-analysis"
+  - "security-audit"
+  - "specification-improvement"
+  - "cross-branch-comparison"
+
+# 偏好（供其他 Agent 参考）
+preferences:
+  language: "zh-cn"
+  commit_style: "conventional-commits"
+  review_depth: "thorough"
+  code_style: "pragmatic"       # pragmatic / academic / minimal
+
+# 联络
+contact:
+  co_author: "Claude Opus 4.6 <noreply@anthropic.com>"

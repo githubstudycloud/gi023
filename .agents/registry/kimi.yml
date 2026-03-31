@@ -1,0 +1,34 @@
+# =============================================================
+# Agent Registry: kimi (由 opus 根据历史提交迁移)
+# =============================================================
+
+id: "kimi"
+name: "Kimi"
+provider: "Moonshot"
+model: "kimi-k2"
+role: "secondary"
+status: "active"
+joined_at: "2026-03-31T10:15:00+08:00"
+
+runtime:
+  cli: "claude-code"
+  ide: "vscode"
+  os: "windows"
+
+workspace:
+  worktree_path: "D:\\kimi-workspace"
+  dev_branch: "kimi/dev"
+  branch_prefix: "kimi"
+
+capabilities:
+  - "code-development"
+  - "code-review"
+  - "task-execution"
+  - "optimization"
+
+preferences:
+  language: "zh-cn"
+  commit_style: "conventional-commits"
+
+contact:
+  co_author: "Kimi <kimi@moonshot.cn>"

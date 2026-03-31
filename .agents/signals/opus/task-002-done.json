@@ -1,0 +1,28 @@
+{
+  "agent": "opus",
+  "task_id": "002",
+  "status": "done",
+  "completed_at": "2026-03-31T12:00:00+08:00",
+  "branch": "opus/dev",
+  "summary": "Framework v2 refactored: distributed registry, signals, locks, multi-CLI support",
+  "files_changed": [
+    ".agents/FRAMEWORK.yml",
+    ".agents/INSTRUCTIONS.md",
+    ".agents/ONBOARDING.md",
+    ".agents/registry/opus.yml",
+    ".agents/registry/glm.yml",
+    ".agents/registry/kimi.yml",
+    ".agents/registry/minimax.yml",
+    ".agents/tasks/.template.yml",
+    ".agents/reviews/.template.yml",
+    ".agents/signals/.gitkeep",
+    ".agents/locks/README",
+    ".github/copilot-instructions.md",
+    ".claude/instructions.md",
+    ".cursorrules",
+    ".aider.conf.yml",
+    ".gitattributes",
+    ".gitignore",
+    "README.md"
+  ]
+}

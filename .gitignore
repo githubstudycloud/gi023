@@ -25,3 +25,6 @@ out/
 # Temp
 *.tmp
 *.log
+
+# Agent locks (不追踪，每个实例本地管理)
+.agents/locks/*.lock
